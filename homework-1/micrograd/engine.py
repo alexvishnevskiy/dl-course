@@ -1,5 +1,6 @@
 import numpy as np
 from typing import Union
+from math import exp
 
 
 class Value:
@@ -27,11 +28,11 @@ class Value:
 
     def __mul__(self, other: Union[int, float, "Value"]) -> "Value":
         other = other if isinstance(other, Value) else Value(other)
-        out = ...
+        out = Value(self.data * other.data, (self, other), '*')
 
         def _backward():
-            self.grad += ...
-            other.grad += ...
+            self.grad += other.data*out.grad
+            other.grad += self.data*out.grad
 
         out._backward = _backward
 
@@ -41,29 +42,29 @@ class Value:
         assert isinstance(
             other, (int, float)
         ), "only supporting int/float powers for now"
-        out = ...
+        out = Value(self.data**other, (self,), _op="power {}".format(other))
 
         def _backward():
-            self.grad += ...
+            self.grad += (other*self.data**(other-1))*out.grad
 
         out._backward = _backward
 
         return out
 
     def exp(self):
-        out = ...
+        out = Value(exp(self.data), (self,), _op="exp")
 
         def _backward():
-            self.grad += ...
+            self.grad += exp(self.data)*out.grad
 
         out._backward = _backward
         return out
 
     def relu(self):
-        out = ...
+        out = Value(max(0, self.data), (self,), _op = 'relu')
 
         def _backward():
-            self.grad += ...
+            self.grad += (self.data>0)*out.grad
 
         out._backward = _backward
 
@@ -87,7 +88,7 @@ class Value:
         # go one variable at a time and apply the chain rule to get its gradient
         self.grad = 1
         for v in reversed(topo):
-            # YOUR CODE GOES HERE
+            v._backward()
 
     def __neg__(self):  # -self
         return self * -1
@@ -144,38 +145,49 @@ class Tensor:
             assert self.shape() == other.shape()
             return Tensor(np.add(self.data, other.data))
         return Tensor(self.data + other)
-
+    
+    def __matmul__(self, other):
+        if not isinstance(other, Tensor):
+            raise ValueError('matmul: Input operand does not have enough dimensions')
+        return Tensor(self.data @ other.data)
+            
     def __mul__(self, other):
-        return ...
+        if isinstance(other, Tensor):
+            return Tensor(self.data * other.data)
+        return Tensor(self.data * other)
     
     def __truediv__(self, other):
-        return ...
+        if isinstance(other, Tensor):
+            return Tensor(self.data / other.data)
+        return Tensor(self.data / other)
     
     def __floordiv__(self, other):
-        return ...
-    
+        if isinstance(other, Tensor):
+            return Tensor(self.data // other.data)
+        return Tensor(self.data//other)
+
     def __radd__(self, other):
-        return ...
+        return self + other
     
     def __rmull__(self, other):
-        return ...
+        return self * other
 
     def exp(self):
-        return ...
+        return Tensor(np.exp(self.data))
 
     def dot(self, other):
         if isinstance(other, Tensor):
-            return ...
-        return ...
+            return Tensor(np.dot(self.data, other))
+        return Tensor(self.data*other)
 
     def shape(self):
         return self.data.shape
 
     def argmax(self, dim=None):
-        return ...
+        return np.argmax(self.data, axis = dim)
 
     def max(self, dim=None):
-        return ...
+        return np.max(self.data, axis = dim)
 
     def reshape(self, *args, **kwargs):
         self.data = ...
