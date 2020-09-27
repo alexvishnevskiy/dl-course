@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union
+from typing import Union, Tuple
 from math import exp
 
 
@@ -84,7 +84,7 @@ class Value:
                 topo.append(v)
 
         build_topo(self)
-
+        print(len(topo))
         # go one variable at a time and apply the chain rule to get its gradient
         self.grad = 1
         for v in reversed(topo):
@@ -130,55 +130,123 @@ class Value:
         return f"Value(data={self.data}, grad={self.grad})"
 
 
-class Tensor:
+class Tensor(Value):
     """
     Tensor is a kinda array with expanded functianality.
 
     Tensor is very convenient when it comes to matrix multiplication,
     for example in Linear layers.
     """
-    def __init__(self, data):
+    def __init__(self, data, _children=(), _op=""):
+        super().__init__(data, _children, _op)
         self.data = np.array(data)
+        self.grad = np.zeros_like(self.data)
 
     def __add__(self, other):
         if isinstance(other, Tensor):
             assert self.shape() == other.shape()
-            return Tensor(np.add(self.data, other.data))
-        return Tensor(self.data + other)
+            #if two of them are Tensors just add
+            out =  Tensor(self.data + other.data, _children = (self, other), _op = '+')
+        else:
+            #convert to Tensor
+            #add Tensor and Tensor
+            other = Tensor(np.ones_like(self.data)*other.data) if isinstance(other, Value) else \
+                                                               Tensor(np.ones_like(self.data)*other)
+            out = Tensor(self.data + other.data, _children = (self, other), _op = '+')
+
+        def _backward():
+            self.grad += out.grad
+            other.grad += out.grad
+
+        out._backward = _backward
+        
+        return out
     
     def __matmul__(self, other):
         if not isinstance(other, Tensor):
             raise ValueError('matmul: Input operand does not have enough dimensions')
-        return Tensor(self.data @ other.data)
+        out = Tensor(self.data @ other.data, (self, other), 'matmul')
+        
+        def _backward():
+            self.grad += out.grad @ other.data.transpose()
+            other.grad += self.data.transpose() @ out.grad
+        
+        out._backward = _backward
+        
+        return out
             
     def __mul__(self, other):
-        if isinstance(other, Tensor):
-            return Tensor(self.data * other.data)
-        return Tensor(self.data * other)
+        if not isinstance(other, Tensor):
+            other = Tensor(np.ones_like(self.data)*other)
+        out =  Tensor(self.data * other.data, (self, other), 'multiply')
+        
+        def _backward():
+            self.grad += other.data*out.grad
+            other.grad += self.data*out.grad
+        
+        out._backward = _backward
+        
+        return out
     
-    def __truediv__(self, other):
-        if isinstance(other, Tensor):
-            return Tensor(self.data / other.data)
-        return Tensor(self.data / other)
-    
-    def __floordiv__(self, other):
-        if isinstance(other, Tensor):
-            return Tensor(self.data // other.data)
-        return Tensor(self.data//other)
+    def __pow__(self, other):
+        assert isinstance(
+            other, (int, float)
+        ), "only supporting int/float powers for now"
+        out = Tensor(self.data**other, (self,), _op="power {}".format(other))
+
+        def _backward():
+            self.grad += (other*self.data**(other-1))*out.grad
+
+        out._backward = _backward
+
+        return out
 
     def __radd__(self, other):
         return self + other
     
-    def __rmull__(self, other):
+    def __rmul__(self, other):
         return self * other
 
     def exp(self):
-        return Tensor(np.exp(self.data))
+        out = Tensor(np.exp(self.data), (self,), _op="exp")
+
+        def _backward():
+            self.grad += np.exp(self.data)*out.grad
+
+        out._backward = _backward
+        return out
 
     def dot(self, other):
-        if isinstance(other, Tensor):
-            return Tensor(np.dot(self.data, other))
-        return Tensor(self.data*other)
+        assert isinstance(other, Tensor)
+        assert other.shape() == self.shape()
+        
+        out = Tensor(np.dot(self.data, other), (self, other), _op = 'dot')
+        
+        def _backward():
+            self.grad += other.data*(np.ones_like(other.data)*out.grad)
+            other.grad += self.data*(np.ones_like(self.data)*out.grad)
+            
+        out._backward = _backward
+        return out
+    
+    def backward(self, jacobian = []):
+
+        # topological order all of the children in the graph
+        topo = []
+        visited = set()
+
+        def build_topo(v):
+            if v not in visited:
+                visited.add(v)
+                for child in v._prev:
+                    build_topo(child)
+                topo.append(v)
+
+        build_topo(self)
+        # go one variable at a time and apply the chain rule to get its gradient
+        self.grad = jacobian if len(jacobian) else np.ones_like(self.data)
+        for v in reversed(topo):
+            v._backward()
 
     def shape(self):
         return self.data.shape
@@ -188,23 +256,48 @@ class Tensor:
 
     def max(self, dim=None):
         return np.max(self.data, axis = dim)
+    
+    def relu(self):
+        out = Tensor(np.where(self.data>0, self.data, 0), (self,), _op = 'relu')
 
-    def reshape(self, *args, **kwargs):
-        self.data = ...
+        def _backward():
+            self.grad += (self.data>0)*out.grad
+
+        out._backward = _backward
+
+        return out
+
+    def reshape(self, shape: Tuple[int], order = 'C'):
+        self.data = self.data.reshape(shape, order = order)
+        return self
+    
+    def squeeze(self, axis = None):
+        self.data = self.data.squeeze(axis = axis)
         return self
 
-    def backward(self):
-        for value in self.data.flatten():
-            value.backward()
-
     def parameters(self):
-        return list(self.data.flatten())
+        return self.data
 
     def __repr__(self):
         return "Tensor\n" + str(self.data)
 
     def __getitem__(self, item):
         return self.data[item]
+    
+    def __le__(self, other):
+        if isinstance(other, Tensor):
+            return Tensor(self.data <= other.data)
+        return Tensor(self.data <= other)
+    
+    def __lt__(self, other):
+        if isinstance(other, Tensor):
+            return Tensor(self.data < other.data)
+        return Tensor(self.data < other)
+
+    def __gt__(self, other):
+        if isinstance(other, Tensor):
+            return Tensor(self.data > other.data)
+        return Tensor(self.data > other)
 
     def item(self):
-        return self.data.flatten()[0].data
+        return float(self.data.squeeze())
