@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Union, Tuple
 from math import exp
+import math
 
 
 class Value:
@@ -59,6 +60,16 @@ class Value:
 
         out._backward = _backward
         return out
+    
+    def log(self):
+        out = Value(math.log(self.data), (self,), _op = 'log')
+        
+        def _backward():
+            self.grad += out.grad/(self.data)
+
+        out._backward = _backward
+
+        return out
 
     def relu(self):
         out = Value(max(0, self.data), (self,), _op = 'relu')
@@ -84,7 +95,6 @@ class Value:
                 topo.append(v)
 
         build_topo(self)
-        print(len(topo))
         # go one variable at a time and apply the chain rule to get its gradient
         self.grad = 1
         for v in reversed(topo):

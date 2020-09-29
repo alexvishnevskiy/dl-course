@@ -1,5 +1,4 @@
 import numpy as np
-
 from engine import Value, Tensor
 
 
@@ -42,6 +41,23 @@ class ReLU(Module):
 
 class CrossEntropyLoss(Module):
     """Cross-entropy loss for multi-class classification"""
-    def forward(self, inp, label):
+    def forward(self, inp: "Tensor", label: "Tensor") -> "Value":
         # Create CrossEntropy Loss Module
-        return ...
+        #inp.size = (batch_size, number of classes)
+        #label.size = (batch_size)
+        #loss = -log(exp(x_i)/np.sum(exp)) cross entropy loss
+        #construct jacobian
+        grads = []
+        loss = []
+        for i, row in enumerate(inp.data):
+            init = list(map(Value, row))
+            exp_ = list(map(lambda x: x.exp(), init))
+            softmax = list(map(lambda x: x/sum(exp_), exp_))
+            outputs = -softmax[label.data[i]].log()
+            outputs.backward()
+            grads.append(list(map(lambda x: x.grad, init)))
+            loss.append(outputs)
+        jacobian = np.array(grads)
+        loss = sum(loss)/len(loss)
+        loss.backward = lambda : inp.backward(jacobian)
+        return loss
