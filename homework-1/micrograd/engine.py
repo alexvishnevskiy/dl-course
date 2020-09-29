@@ -286,7 +286,7 @@ class Tensor(Value):
         return self
 
     def parameters(self):
-        return self.data
+        return self
 
     def __repr__(self):
         return "Tensor\n" + str(self.data)
