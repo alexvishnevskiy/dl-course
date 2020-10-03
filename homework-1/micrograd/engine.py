@@ -154,7 +154,6 @@ class Tensor(Value):
 
     def __add__(self, other):
         if isinstance(other, Tensor):
-            assert self.shape() == other.shape()
             #if two of them are Tensors just add
             out =  Tensor(self.data + other.data, _children = (self, other), _op = '+')
         else:
@@ -173,8 +172,6 @@ class Tensor(Value):
         return out
     
     def __matmul__(self, other):
-        if not isinstance(other, Tensor):
-            raise ValueError('matmul: Input operand does not have enough dimensions')
         out = Tensor(self.data @ other.data, (self, other), 'matmul')
         
         def _backward():
@@ -276,10 +273,14 @@ class Tensor(Value):
         out._backward = _backward
 
         return out
+    
+    def T(self):
+        out = Tensor(self.data.transpose(), (self,), _op = 'transpose')
+        return out
 
     def reshape(self, shape: Tuple[int], order = 'C'):
-        self.data = self.data.reshape(shape, order = order)
-        return self
+        out = Tensor(self.data.reshape(shape, order = order))
+        return out
     
     def squeeze(self, axis = None):
         self.data = self.data.squeeze(axis = axis)

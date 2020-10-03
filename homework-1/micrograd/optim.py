@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class SGD:
     def __init__(self, parameters, lr):
         self.parameters = parameters
@@ -6,12 +9,14 @@ class SGD:
     def step(self):
         """Applying gradient descent to parameters"""
         for parameter in self.parameters:
-            parameter.data -= self.lr*parameter.grad
+            gradient = parameter.grad if parameter.data.shape == parameter.grad.shape else \
+                                                           np.sum(parameter.grad, axis = 0)
+            parameter.data -= self.lr*gradient
 
     def zero_grad(self):
         """Resetting gradient for all parameters (set gradient to zero)"""
         for i, parameter in enumerate(self.parameters):
-            self.parameters[i].grad = 0
+            self.parameters[i].grad = 0 
             
 
 class StepLR:

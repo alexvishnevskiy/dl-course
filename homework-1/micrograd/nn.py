@@ -17,6 +17,9 @@ class Module:
     def parameters(self):
         """Return list of trainable parameters"""
         return []
+    
+    def __repr__(self):
+        return f"{[param for param in self.parameters()]}"
 
 
 class Linear(Module):
@@ -24,12 +27,12 @@ class Linear(Module):
         """Initializing model"""
         # Create Linear Module
         stdv = 1./np.sqrt(in_features)
-        self.W = np.random.uniform(-stdv, stdv, size = (out_features, in_features))
-        self.b = np.random.uniform(-stdv, stdv, size = out_features)
+        self.W = Tensor(np.random.uniform(-stdv, stdv, size = (in_features, out_features)))
+        self.b = Tensor(np.random.uniform(-stdv, stdv, size = out_features))
 
     def forward(self, inp):
         """Y = W * x + b"""
-        return inp @ self.W.T + self.b
+        return inp @ self.W + self.b
 
     def parameters(self):
         return [self.W, self.b]
@@ -70,3 +73,4 @@ class CrossEntropyLoss(Module):
         #backward pass with jacobian
         loss.backward = lambda : inp.backward(jacobian)
         return loss
+
